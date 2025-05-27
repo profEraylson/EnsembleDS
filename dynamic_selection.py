@@ -1,8 +1,11 @@
 import numpy as np
 from sklearn.metrics import mean_absolute_error as MAE
 from ModeloTeste import ModeloTeste
-
-
+import pandas as pd
+from preprocessamento import split_train_val_test, TimeSeriesNormalizer, select_lag_acf, create_windows_targets
+from models import train_linear_regression
+from bagging import BaggingEnsemble
+import matplotlib.pyplot as plt
 
 
 def select_k_similar_windows(training_windows, test_window, k): 
@@ -41,7 +44,7 @@ def proxy_ds(x_training_windows, y_training, last_window, k, n, models, h):
     '''1ª Ideia: seleciona os h-step ahead models utilizando a previsão t como um substituto do valor real'''
     preds = []
     for _ in range(h):
-        print(last_window)
+        
         selected_models, _ = ola_ds_selection(x_training_windows, y_training, last_window, k, n, models)
         prev = selected_models[0].predict(last_window.reshape(1, -1))
         preds.append(prev.item())        
@@ -73,6 +76,7 @@ def select_best_model(training_windows, target_values, h, models):
 
     # Identificar o índice do modelo com o menor MAE
     best_model_index = np.argmin(mae_scores)
+    print(f"Melhor modelo pelo ds_h_previous_roc: {best_model_index} ")
     best_model = models[best_model_index]
     
 
@@ -87,7 +91,7 @@ def recursive_forecast(model, last_window, h):
 
     for _ in range(h):
         # Realizar a previsão para o próximo passo
-        print(current_input)
+        
         next_prediction = model.predict(current_input.reshape(1, -1))[0]
         
         # Adicionar a previsão à lista de previsões
@@ -114,7 +118,9 @@ def ds_h_previous(training_windows, target_values, last_window, h, models):
 
 def ds_h_previous_roc(training_windows, training_targets, test_window, h, models, k):
     '''2ª IDEIA:
-    Seleciona o modelo que apresenta maior desempenho em prever as h step de cada janela da ROC '''
+    Seleciona o modelo que apresenta maior desempenho em prever as h step de cada janela da ROC 
+    Forma recursiva. Modelo selecionado faz a previsão multi-step
+    '''
 
      
     # Calcula a similaridade (distância euclidiana) entre a janela de teste e as janelas de treinamento
@@ -158,6 +164,7 @@ def ds_h_previous_roc(training_windows, training_targets, test_window, h, models
     # Seleciona o índice do modelo com menor MAE
     best_model_index = np.argmin(model_maes)
     model = models[best_model_index]
+    print(f"Melhor modelo pelo ds_h_roc: {best_model_index} ")
     prevs = recursive_forecast(model, test_window, h)
     
     return prevs
@@ -168,31 +175,49 @@ def ds_h_previous_roc(training_windows, training_targets, test_window, h, models
 
 
 if __name__ == "__main__":
-    # Exemplo de dados
-    x_training_windows = np.array([
-        [1, 2, 3],
-        [4, 5, 6],
-        [7, 8, 9],
-        [3, 4, 5],
-        [2, 3, 4],
-        [1, 2, 5]
-    ])
 
-    y_training = np.array([1,2,3,4,5,6])
+    path = 'https://raw.githubusercontent.com/EraylsonGaldino/dataset_time_series/master/airline.txt'
+    df_serie = pd.read_csv(path, header=None)
+    df_serie['date'] = pd.date_range(start='1950', periods=df_serie.shape[0], freq='ME')
+    serie = df_serie[0]
+    p_tr = 0.75 #75% treinamento
+    train, test = split_train_val_test(serie, p_tr)
 
+    normalizer = TimeSeriesNormalizer()
+    normalizer.fit(train)
+    train_norm = normalizer.transform(train)
+    test_norm = normalizer.transform(test)
+    max_lag = 20
+    lags_acf = select_lag_acf(train_norm, max_lag)
+    max_sel_lag = lags_acf[0]
+    X_train, y_train = create_windows_targets(train_norm, max_sel_lag, h=1)
+    X_test, y_test = create_windows_targets(test_norm, max_sel_lag,  h=1) 
 
-    test_window = np.array([3, 4, 5])
     k = 2
 
-    models = [ModeloTeste(i) for i in range(0, 10)]
+    ensemble = BaggingEnsemble(
+        base_model_fn=train_linear_regression,
+        n_models=50,
+        val_pct=0.2,    
+        combine_method='median'
+        )
+
+    ensemble.fit(X_train, y_train)
    
 
     n = 1
-    h = 3
-    preds = proxy_ds(x_training_windows, y_training, test_window, k, n, models, h)
-    preds = ds_h_previous(x_training_windows, y_training, test_window, h, models)
-    preds_roc = ds_h_previous_roc(x_training_windows, y_training, test_window, h, models, k)
-   
+    h = 17
+    test_window = X_test[0, :]
+    models = ensemble.get_ensemble()['models']
+    preds_prox = proxy_ds(X_train, y_train, test_window, k, n, models, h)
+    preds_h_prev = ds_h_previous(X_train, y_train, test_window, h, models)
+    preds_roc = ds_h_previous_roc(X_train, y_train, test_window, h, models, k)
+    plt.plot(y_test, label = 'y')
+    plt.plot(preds_h_prev, label = 'h_prev')
+    plt.plot(preds_prox, label = 'prox')
+    plt.plot(preds_roc, label = 'roc')
+    plt.legend()
+    plt.show()
     breakpoint()
 
     
