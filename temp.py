@@ -139,17 +139,17 @@ def h_aware_selection(x_training_windows, y_training, test_window, k, models, h)
         if len(future) == h:
             Y_roc_targets.append(future)
             valid_roc_indices.append(idx)
-    breakpoint()
+    
     if len(Y_roc_targets) == 0:
         raise ValueError("Não foi possível extrair H passos futuros completos da RoC.")
     
     Y_roc_targets = np.array(Y_roc_targets)
     X_roc = x_training_windows[valid_roc_indices]
-
+    
     # Passo 3: Avaliar erro por modelo e por horizonte h
     n_models = len(models)
-    errors_per_model_h = np.full((n_models, h), np.inf)
-
+    #errors_per_model_h = np.full((n_models, h), np.nan)
+    errors_per_model_h = np.zeros((n_models, h))
     for model_idx, model in enumerate(models):
         for i, window in enumerate(X_roc):
             window_copy = list(window)
@@ -161,10 +161,13 @@ def h_aware_selection(x_training_windows, y_training, test_window, k, models, h)
                 window_copy.append(pred)
                 window_copy.pop(0)
             true = Y_roc_targets[i]
-            errors_per_model_h[model_idx] += np.abs(np.array(preds) - true)
+            
+            errors_per_model_h[model_idx, :] = np.abs(np.array(preds) - true)
     
-    errors_per_model_h /= len(Y_roc_targets)
-
+    
+    
+    errors_per_model_h /= len(Y_roc_targets) #media para fazer o MAE
+    
     # Passo 4: Selecionar melhor modelo para cada h
     best_model_indices = np.argmin(errors_per_model_h, axis=0)
 
@@ -180,6 +183,9 @@ def h_aware_selection(x_training_windows, y_training, test_window, k, models, h)
         current_window.pop(0)
 
     return forecast, best_model_indices.tolist()
+
+
+
 
 
 models = [ModeloTeste(bias) for bias in [0.1, 0.5, 1]]

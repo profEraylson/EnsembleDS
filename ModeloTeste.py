@@ -9,7 +9,7 @@ class ModeloTeste:
     def predict(self, X):        
         
         preds = []
-        for i in range(X.shape[0]):
+        for i in range(X.shape[0]): 
             pred = X[i][-1] + self.bias
             #pred = np.mean(X[i])
             preds.append(pred)
