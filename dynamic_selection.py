@@ -408,13 +408,13 @@ if __name__ == "__main__":
     preds_roc = ds_h_previous_roc(X_train, y_train, test_window, h, models, k)
     preds_aware = h_aware_selection_flexible(X_train, y_train, test_window, k, models, h)
     
-    # plt.plot(y_test, label = 'y')
-    # plt.plot(preds_h_prev, label = 'h_prev')
-    # plt.plot(preds_prox, label = 'prox')
-    # plt.plot(preds_roc, label = 'roc')
-    # plt.plot(preds_aware, label = 'aware')
-    # plt.legend()
-    # plt.show()
+    plt.plot(y_test, label = 'y')
+    plt.plot(preds_h_prev, label = 'h_prev')
+    plt.plot(preds_prox, label = 'prox')
+    plt.plot(preds_roc, label = 'roc')
+    plt.plot(preds_aware, label = 'aware')
+    plt.legend()
+    plt.show()
     # breakpoint()
 
     models_prevs = [
